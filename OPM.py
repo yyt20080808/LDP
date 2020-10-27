@@ -1,4 +1,4 @@
-#coding=utf-8
+# coding=utf-8
 import numpy as np
 
 # from scipy.stats import binom
@@ -7,10 +7,12 @@ import matplotlib.pyplot as plt
 import random
 
 import math
-def OPM(ori_samples,  eps, randomized_bins=1024, domain_bins=1024):
-    e_epsilon = math.e**eps
+
+
+def OPM(ori_samples, eps, randomized_bins=1024, domain_bins=1024):
+    e_epsilon = math.e ** eps
     e_epsilon_sqrt = math.sqrt(e_epsilon)
-    B = (e_epsilon_sqrt+9) / (10*e_epsilon_sqrt-10)
+    B = (e_epsilon_sqrt + 9) / (10 * e_epsilon_sqrt - 10)
     k = B * e_epsilon / (B * e_epsilon - 1 - B)
     C = k + B
     q = 1 / (2 * B * e_epsilon + 2 * k)
@@ -22,90 +24,81 @@ def OPM(ori_samples,  eps, randomized_bins=1024, domain_bins=1024):
     # noisy_samples = np.zeros_like(samples) # 扰动后的数据？
 
     # report
-    noisy_samples= OPM_noise(samples,k,B,C,pr)
+    noisy_samples = OPM_noise(samples, k, B, C, pr)
 
     # report matrix
     m = randomized_bins
     n = domain_bins
-    m_cell = (2*C) / m  # 输出空间转化为bin， 每个bin 的size
-    n_cell = 2 / n   # 输入空间转化为 bin， 每个bin的size
+    m_cell = (2 * C) / m  # 输出空间转化为bin， 每个bin 的size
+    n_cell = 2 / n  # 输入空间转化为 bin， 每个bin的size
 
     transform = np.ones((m, n)) * q * m_cell
-    q_value = transform[0,0]
+    q_value = transform[0, 0]
     p_value = q_value * e_epsilon
-    for i in range(n):
-        # 遍历所有bin的值
-        # 输入的bin的左右边界
-        left_input_v = -1 + i * n_cell
-        right_input_v = -1 + (i+1)*n_cell
-        # 输出的range 的4个边界
-        # left_low_1 = -1 * C
-        x = (left_input_v+right_input_v)/2
-        # x = left_input_v
-        left_high = -C + k*x - B
-        right_high = -C + k*x + B
-
-        left_index = int((left_high +C) / m_cell + m/2)
-        right_index = int((right_high +C) / m_cell+m/2)
-
-        left_index_boundary = (left_index+0.5) * m_cell
-        right_index_boundary = (right_index+0.5) * m_cell
-        left_proportion = (left_high+2*C  - left_index_boundary) / m_cell
-        right_proportion = (right_high+2*C  - right_index_boundary) / m_cell
-
-
-
-        transform[left_index, i] = p_value * (1-left_proportion) + q_value * left_proportion
-        transform[right_index, i] = p_value * right_proportion + q_value * (1-right_proportion)
-        for j in range(left_index+1,right_index):
-            transform[j,i] = p_value
-        print(sum(transform[:,i]))
-        sumALL = sum(transform[:,i])
-        diff = sumALL - 1
-        if diff > 0:
-            # 表示要减少 left_index 和 right_index 的值
-            temp111 = p_value - transform[left_index, i]
-            if temp111 > diff:
-                transform[left_index, i] += diff
+    pro_pass = 0
+    left_index = 0
+    right_index = 0
+    # 计算 一列中多少个
+    for i in range(0, n):
+        if i== n-1:
+            sss =1
+        if i == 0:
+            a = int(B / C * n)
+            reseverytime = 1 - a * p_value - (n - a) * q_value
+            sss = (p_value-q_value-reseverytime)
+            pro_pass = ((n - a-1)  * (p_value - q_value) + (p_value-q_value-reseverytime)) / (n-1)
+            transform[0:a, i ] = p_value
+            transform[a, i ] = q_value + reseverytime
+            right_index = a
+            left_index = 0
+        else:
+            temp_right = transform[left_index,i-1] - pro_pass
+            if temp_right >= q_value:
+                transform[left_index, i] = transform[left_index,i-1] - pro_pass # 左边减去 1
+                if transform[right_index, i-1] + pro_pass < p_value:
+                    transform[right_index, i ] = transform[right_index, i-1] + pro_pass
+                else: # 说明要 right_index+1
+                    overflow = transform[right_index, i-1] + pro_pass - p_value
+                    transform[right_index, i] = p_value
+                    if right_index >= n-1 and   overflow < 1e-5:
+                        transform[left_index + 1:right_index, i] = p_value
+                        break
+                    right_index+=1
+                    transform[right_index,i] = q_value + overflow
             else:
-                transform[left_index, i] = p_value
-                transform[right_index, i] += diff-temp111
-        elif diff < 0:
-            if transform[right_index, i] -q_value > abs(diff):
-                transform[right_index, i] += diff
-            else:
-                transform[right_index, i] = q_value
-        # transform[i,left_index] = p_value * (1 - left_proportion) + q_value * left_proportion
-        # transform[i,right_index] = p_value * right_proportion + q_value * (1-right_proportion)
-        # for j in range(left_index+1,right_index):
-        #     transform[i,j] = p_value
-        # # print(sum(transform[i,j]))
-        # sumALL = sum(transform[i,:])
-        # diff = sumALL - 1
-        # if diff > 0:
-        #     # 表示要减少 left_index 和 right_index 的值
-        #     temp111 = p_value - transform[i,left_index]
-        #     if temp111 > diff:
-        #         transform[i,left_index] += diff
-        #     else:
-        #         transform[i,left_index] = p_value
-        #         transform[i ,right_index] += diff-temp111
-        # elif diff < 0:
-        #     if transform[i ,right_index] -q_value > abs(diff):
-        #         transform[i ,right_index] += diff
-        #     else:
-        #         transform[i ,right_index] = q_value
-    print( np.sum(transform, axis=1)) # 表示每一列每一列。
+                overflow = pro_pass - (transform[left_index,i-1] - q_value)
+                transform[left_index, i] = q_value
+                left_index+= 1
+                transform[left_index,i] = p_value - overflow
+                if transform[right_index, i-1] + pro_pass < p_value:
+                    transform[right_index, i ] = transform[right_index, i-1] + pro_pass
+                else: # 说明要 right_index+1
+                    overflow = transform[right_index, i-1] + pro_pass - p_value
+                    transform[right_index, i] = p_value
+                    if right_index == n-1 and  overflow < 1e-4:
+                        transform[left_index+1:right_index, i] = p_value
+                        break
+                    right_index+=1
+                    transform[right_index,i] = q_value + overflow
+            for jjj in range(left_index+1,right_index):
+                transform[jjj, i] = p_value
+        # print(sum(transform[:, i]))
+
+
+    # print( np.sum(transform, axis=0)) # 表示每一列每一列。
+    # for jjjj in range(n):
+    print(transform[:, -2])
+    print(transform[:, -1])
     max_iteration = 10000
     loglikelihood_threshold = 1e-3
-    ns_hist, _ = np.histogram(noisy_samples, bins=randomized_bins, range=(-1*C, C))
-
-
+    ns_hist, _ = np.histogram(noisy_samples, bins=randomized_bins, range=(-1 * C, C))
+    # print("noisesss ")
+    # print(ns_hist)
     # return EM(n, ns_hist, transform, max_iteration, loglikelihood_threshold) * len(ori_samples)
     return EMS(m, ns_hist, transform, max_iteration, loglikelihood_threshold) * len(ori_samples)
 
 
-def OPM_noise(samples,k,B,C,pr):
+def OPM_noise(samples, k, B, C, pr):
     res = []
     count = 0
     for value in samples:
@@ -119,22 +112,23 @@ def OPM_noise(samples,k,B,C,pr):
             temp = random.random()
             ppp = (lt + C) / (2 * k)
             if ppp > temp:
-                perturbed_value =  temp * (2 * k) - C
+                perturbed_value = temp * (2 * k) - C
             else:
                 perturbed_value = rt + (temp - ppp) * (2 * k)
 
-        hhh = 2*C / 100 -C
+        hhh = 2 * C / 100 - C
         if perturbed_value < hhh:
-            count+=1
+            count += 1
         res.append(perturbed_value)
-    print(count)
+
     return np.array(res)
+
 
 def EMS(n, ns_hist, transform, max_iteration, loglikelihood_threshold):
     # smoothing matrix
     smoothing_factor = 2
     # binomial_tmp = [binom(smoothing_factor, k) for k in range(smoothing_factor + 1)]
-    binomial_tmp = [1,2,1] #[1,6,15,20,15,6,1] #[1, 2, 1]
+    binomial_tmp = [1, 2, 1]  # [1,6,15,20,15,6,1] #[1, 2, 1]
     smoothing_matrix = np.zeros((n, n))
     central_idx = int(len(binomial_tmp) / 2)
     for i in range(int(smoothing_factor / 2)):
@@ -212,19 +206,27 @@ def EM(n, ns_hist, transform, max_iteration, loglikelihood_threshold):
 
         r += 1
     return theta
+
+
 if __name__ == "__main__":
-    ori = np.random.normal(-0.3, 0.3, 50000)
-    # ori = np.random.uniform(-1,1,100000)
+    # ori = np.random.normal(-0.3, 0.3, 50000)
+    binnumber = 200
+    ori = np.random.uniform(-1, 1, 500000)
+    ns_nist, _ = np.histogram(ori, bins=binnumber, range=(-1, 1))
+    print(ns_nist)
+    # x = [i for i in range(256)]
+    # plt.bar(x, ns_nist)
+    # plt.show()
     new_ori = []
     for i in ori:
-        if i > 1 or i <-1:
+        if i > 1 or i < -1:
             pass
         else:
             new_ori.append(i)
     # for i in ori2:
     #     new_ori.append(i)
     new_ori = np.array(new_ori)
-    theta = OPM(new_ori,2,randomized_bins=256, domain_bins=256)
+    theta = OPM(new_ori, 1, randomized_bins=binnumber, domain_bins=binnumber)
     print(theta)
     x = [i for i in range(len(theta))]
     plt.bar(x, theta)
@@ -232,7 +234,7 @@ if __name__ == "__main__":
     plt.ylabel(u'2', fontsize=20)
     plt.tick_params(labelsize=20)
     # plt.text(1.19, 3.5, "key point", fontdict={'size': '16', 'color': 'b'})
-    plt.title(u"Comparision and varying epsilon", fontsize=16)
+    # plt.title(u"Comparision and varying epsilon", fontsize=16)
     # plt.axvline(x=1.185, ls="-", c="red")  # 添加垂直直线
     # plt.axvline(x=1.29, ls="-", c="gray")  # 添加垂直直线
     plt.legend()
